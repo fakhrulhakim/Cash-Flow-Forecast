@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Cash Flow Forecast Engine</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Export Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0b1120; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Matrix Table Specific Styles */
+        .matrix-table th, .matrix-table td { white-space: nowrap; }
+        .matrix-row-hover:hover td { background-color: #1e293b; }
+        .clickable-cell { cursor: pointer; position: relative; }
+        
+        /* Calendar Grid */
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background-color: #334155; border: 1px solid #334155; }
+        .calendar-cell { background-color: #0f172a; min-height: 100px; padding: 8px; }
+        .calendar-header { background-color: #1e293b; color: #94a3b8; text-align: center; font-size: 0.75rem; padding: 8px; font-weight: bold; text-transform: uppercase; }
+        
+        /* Co-Pilot Panel */
+        #copilot-panel { transition: transform 0.3s ease-in-out; }
+        .copilot-closed { transform: translateX(100%); }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans flex flex-col lg:flex-row overflow-hidden">
+
+    <!-- SIDEBAR NAVIGATION & FILTERS -->
+    <aside class="w-full lg:w-72 bg-slate-800 border-b lg:border-b-0 lg:border-r border-slate-700 flex flex-col shadow-xl z-20">
+        <div class="p-6 border-b border-slate-700">
+            <h1 class="text-xl font-bold tracking-wider text-teal-400 flex items-center gap-2 uppercase">
+                <i class="fa-solid fa-chart-pie"></i> Telaga Group
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">Cash Flow Engine & Bukku Sync</p>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="flex flex-col p-4 gap-1 border-b border-slate-700 flex-1 overflow-y-auto">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 px-2">1. Data Inputs</h2>
+            <button onclick="switchTab('page1')" id="tab-page1" class="tab-btn text-left px-4 py-2 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-slate-200 font-medium text-sm transition-colors">
+                <i class="fa-solid fa-file-invoice mr-2 w-4"></i> 1. Current Outstanding
+            </button>
+            <button onclick="switchTab('page2')" id="tab-page2" class="tab-btn text-left px-4 py-2 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-slate-200 font-medium text-sm transition-colors">
+                <i class="fa-solid fa-rotate mr-2 w-4"></i> 2. Recurring Costs/Rev
+            </button>
+            <button onclick="switchTab('page3')" id="tab-page3" class="tab-btn text-left px-4 py-2 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-slate-200 font-medium text-sm transition-colors">
+                <i class="fa-solid fa-bolt mr-2 w-4"></i> 3. One-Time Costs/Rev
+            </button>
+            
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mt-6 mb-2 px-2">2. Analysis & Output</h2>
+            <button onclick="switchTab('page4')" id="tab-page4" class="tab-btn active text-left px-4 py-2 rounded-lg bg-teal-500/20 text-teal-400 font-medium text-sm transition-colors">
+                <i class="fa-solid fa-table-list mr-2 w-4"></i> 4. Cash Flow Forecast
+            </button>
+            <button onclick="switchTab('page5')" id="tab-page5" class="tab-btn text-left px-4 py-2 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-slate-200 font-medium text-sm transition-colors">
+                <i class="fa-regular fa-calendar-days mr-2 w-4"></i> 5. Calendar Timeline
+            </button>
+        </nav>
+
+        <!-- Global Filters -->
+        <div id="global-filters" class="p-5 bg-slate-800 flex flex-col gap-3 transition-opacity">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex justify-between items-center">
+                <span>Output Filters</span>
+                <i class="fa-solid fa-filter text-teal-500"></i>
+            </h2>
+            
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[11px] uppercase tracking-wide text-slate-400">Period Interval</label>
+                <select id="filter-interval" onchange="renderAnalysis()" class="bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-teal-400">
+                    <option value="Daily">Daily</option>
+                    <option value="Monthly" selected>Monthly</option>
+                    <option value="Yearly">Yearly</option>
+                </select>
+            </div>
+
+            <!-- Custom Date Filters -->
+            <div class="grid grid-cols-2 gap-2 mt-1">
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] uppercase tracking-wide text-slate-400">Start Date</label>
+                    <input type="date" id="filter-start" value="2026-01-01" onchange="renderAnalysis()" class="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none w-full">
+                </div>
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-[10px] uppercase tracking-wide text-slate-400">End Date</label>
+                    <input type="date" id="filter-end" value="2026-06-30" onchange="renderAnalysis()" class="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none w-full">
+                </div>
+            </div>
+            
+            <div class="flex flex-col gap-1.5 mt-1 border-b border-slate-700 pb-4">
+                <label class="text-[11px] uppercase tracking-wide text-teal-400 font-bold">Opening Cash (RM)</label>
+                <input type="number" id="opening-balance" value="0" onchange="renderAnalysis()" class="bg-slate-900 border border-teal-700 rounded px-2 py-1.5 text-sm text-white font-bold focus:outline-none focus:border-teal-400">
+            </div>
+        </div>
+
+        <!-- Export Buttons -->
+        <div class="p-4 bg-slate-900 flex flex-col gap-2">
+            <h2 class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 px-1">Export Reports</h2>
+            <div class="flex gap-2">
+                <button onclick="exportToPDF()" class="flex-1 bg-rose-600/20 text-rose-400 hover:bg-rose-600 hover:text-white py-2 rounded text-xs font-bold transition-colors border border-rose-600/30">
+                    <i class="fa-solid fa-file-pdf mr-1"></i> PDF
+                </button>
+                <button onclick="exportToExcel()" class="flex-1 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white py-2 rounded text-xs font-bold transition-colors border border-emerald-600/30">
+                    <i class="fa-solid fa-file-excel mr-1"></i> Excel
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN WINDOW -->
+    <main id="main-content" class="flex-1 overflow-y-auto relative bg-[#0b1120] flex flex-col">
+        
+        <div class="p-6 lg:p-10 flex-1">
+            <!-- PAGE 1: CURRENT OUTSTANDING -->
+            <div id="page1" class="page-content hidden pdf-page">
+                <div class="mb-8">
+                    <h2 class="text-2xl font-bold text-white">1. Current Outstanding Liabilities / Receivables</h2>
+                </div>
+                
+                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 mb-8 shadow-sm no-print">
+                    <form id="form-outstanding" onsubmit="addData(event, 'outstanding')" class="grid grid-cols-1 md:grid-cols-4 gap-5 items-end">
+                        <div class="flex flex-col gap-1 md:col-span-2">
+                            <label class="text-xs text-slate-400">Description</label>
+                            <input type="text" id="out-desc" required class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Type</label>
+                            <select id="out-type" class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                                <option value="Outflow">Outflow (Payable)</option>
+                                <option value="Inflow">Inflow (Receivable)</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Category</label>
+                            <select id="out-category" class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                                <option value="Financing">Financing</option>
+                                <option value="Operating">Operating</option>
+                                <option value="Investing">Investing</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Sub-Category (COA)</label>
+                            <input type="text" id="out-subcategory" required list="coa-list" class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Total Outstanding (RM)</label>
+                            <input type="number" id="out-total" required min="0" step="0.01" class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Instalment Amount (RM)</label>
+                            <input type="number" id="out-instalment" required min="0" step="0.01" class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Next Due Date</label>
+                            <input type="date" id="out-date" required class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="md:col-span-4 flex justify-end mt-2">
+                            <button type="submit" class="bg-teal-600 hover:bg-teal-500 text-white font-semibold py-2.5 px-6 rounded text-sm transition-colors shadow-lg">
+                                <i class="fa-solid fa-plus mr-2"></i> Add
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto shadow-sm">
+                    <table class="w-full text-left text-sm border-collapse">
+                        <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="p-3">Desc</th><th class="p-3">Type</th><th class="p-3">Instalment</th><th class="p-3 no-print">Action</th></tr></thead>
+                        <tbody id="table-outstanding" class="text-slate-200 divide-y divide-slate-700/50"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- PAGE 2: RECURRING COSTS -->
+            <div id="page2" class="page-content hidden pdf-page mt-8">
+                <div class="mb-8"><h2 class="text-2xl font-bold text-white">2. Recurring Costs & Revenues</h2></div>
+                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 mb-8 shadow-sm no-print">
+                    <form id="form-recurring" onsubmit="addData(event, 'recurring')" class="grid grid-cols-1 md:grid-cols-4 gap-5 items-end">
+                        <div class="flex flex-col gap-1 md:col-span-2">
+                            <label class="text-xs text-slate-400">Description</label>
+                            <input type="text" id="rec-desc" required class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Type</label>
+                            <select id="rec-type" class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                                <option value="Inflow">Inflow (Revenue)</option>
+                                <option value="Outflow">Outflow (Expense)</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Amount (RM)</label>
+                            <input type="number" id="rec-amount" required min="0" step="0.01" class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Frequency</label>
+                            <select id="rec-frequency" class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                                <option value="Daily">Daily</option>
+                                <option value="Weekly">Weekly</option>
+                                <option value="Monthly" selected>Monthly</option>
+                                <option value="Yearly">Yearly</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Start Date</label>
+                            <input type="date" id="rec-date" required class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="md:col-span-4 flex justify-end mt-2">
+                            <button type="submit" class="bg-teal-600 hover:bg-teal-500 text-white font-semibold py-2.5 px-6 rounded text-sm transition-colors shadow-lg">Add</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto shadow-sm">
+                    <table class="w-full text-left text-sm border-collapse">
+                        <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="p-3">Desc</th><th class="p-3">Type</th><th class="p-3">Freq.</th><th class="p-3">Amount</th><th class="p-3 no-print">Action</th></tr></thead>
+                        <tbody id="table-recurring" class="text-slate-200 divide-y divide-slate-700/50"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- PAGE 3: ONE-TIME COSTS -->
+            <div id="page3" class="page-content hidden pdf-page mt-8">
+                <div class="mb-8"><h2 class="text-2xl font-bold text-white">3. One-Time Costs & Revenues</h2></div>
+                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 mb-8 shadow-sm no-print">
+                    <form id="form-onetime" onsubmit="addData(event, 'onetime')" class="grid grid-cols-1 md:grid-cols-4 gap-5 items-end">
+                        <div class="flex flex-col gap-1 md:col-span-2">
+                            <label class="text-xs text-slate-400">Description</label>
+                            <input type="text" id="one-desc" required class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Type</label>
+                            <select id="one-type" class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                                <option value="Outflow">Outflow (Expense/Asset)</option>
+                                <option value="Inflow">Inflow (Revenue/Injection)</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Amount (RM)</label>
+                            <input type="number" id="one-amount" required min="0" step="0.01" class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-slate-400">Execution Date</label>
+                            <input type="date" id="one-date" required class="bg-slate-900 border border-slate-600 rounded px-3 py-2.5 text-sm text-slate-100 focus:border-teal-400 focus:outline-none">
+                        </div>
+                        <div class="md:col-span-4 flex justify-end mt-2">
+                            <button type="submit" class="bg-teal-600 hover:bg-teal-500 text-white font-semibold py-2.5 px-6 rounded text-sm transition-colors shadow-lg">Add</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto shadow-sm">
+                    <table class="w-full text-left text-sm border-collapse">
+                        <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="p-3">Desc</th><th class="p-3">Type</th><th class="p-3">Date</th><th class="p-3">Amount</th><th class="p-3 no-print">Action</th></tr></thead>
+                        <tbody id="table-onetime" class="text-slate-200 divide-y divide-slate-700/50"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- PAGE 4: CASH FLOW FORECAST -->
+            <div id="page4" class="page-content block pdf-page mt-8">
+                <div class="mb-6 flex justify-between items-end">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">4. Cash Flow Forecast Matrix</h2>
+                        <p class="text-slate-400 text-sm mt-1 no-print">Double-click any amount to view underlying transactions.</p>
+                    </div>
+                    <button onclick="toggleCopilot()" class="no-print bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors shadow-lg flex items-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> AI Co-Pilot
+                    </button>
+                </div>
+                
+                <div class="rounded-lg border border-slate-800 bg-[#0f172a] overflow-x-auto shadow-2xl">
+                    <table id="export-matrix" class="w-full text-left text-sm border-collapse matrix-table">
+                        <thead><tr id="matrix-header" class="border-b border-slate-700 text-slate-400 uppercase tracking-wider text-[11px] bg-[#172554]/30"></tr></thead>
+                        <tbody id="matrix-body" class="text-slate-200 divide-y divide-slate-800/50"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- PAGE 5: CALENDAR VIEW -->
+            <div id="page5" class="page-content hidden pdf-page mt-8">
+                <div class="mb-6 flex justify-between items-end">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">5. Cash Flow Calendar</h2>
+                        <p class="text-slate-400 text-sm mt-1">Daily timeline of expected inflows and outflows.</p>
+                    </div>
+                    <div class="flex items-center gap-2 no-print">
+                        <button onclick="changeCalendarMonth(-1)" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded border border-slate-600"><i class="fa-solid fa-chevron-left"></i></button>
+                        <input type="month" id="calendar-month-picker" onchange="renderCalendar()" class="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none">
+                        <button onclick="changeCalendarMonth(1)" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded border border-slate-600"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
+                <div class="calendar-grid rounded-lg overflow-hidden shadow-2xl" id="calendar-wrapper">
+                    <!-- Calendar injected via JS -->
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- AI CO-PILOT SLIDE-OVER PANEL -->
+    <div id="copilot-panel" class="fixed right-0 top-0 bottom-0 w-96 bg-slate-800 border-l border-slate-700 shadow-2xl z-50 flex flex-col copilot-closed no-print">
+        <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-indigo-900/50">
+            <h3 class="font-bold text-indigo-400 flex items-center gap-2">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Forecast Co-Pilot
+            </h3>
+            <button onclick="toggleCopilot()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+        <div id="copilot-chat" class="flex-1 p-5 overflow-y-auto flex flex-col gap-4">
+            <div class="bg-slate-700/50 p-4 rounded-lg rounded-tl-none border border-slate-600 text-sm text-slate-200">
+                Hi! I'm your AI financial co-pilot. I can help analyze your cash flows—from daily operational clearings to larger CapEx plans and project budgets. <br><br>Click the button below to generate a quick summary of your current matrix data.
+            </div>
+        </div>
+        <div class="p-4 border-t border-slate-700 bg-slate-900">
+            <button onclick="generateAIAnalysis()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors shadow-lg">
+                Run Quick Analysis
+            </button>
+        </div>
+    </div>
+
+    <!-- Datalist -->
+    <datalist id="coa-list">
+        <option value="Room Revenue"></option><option value="F&B Revenue"></option><option value="Property & Maintenance"></option>
+    </datalist>
+
+    <script>
+        let db = { outstanding: [], recurring: [], onetime: [] };
+        let globalMatrixData = {}; 
+
+        // UI Navigation
+        function switchTab(pageId) {
+            document.querySelectorAll('.page-content').forEach(el => {
+                el.classList.add('hidden');
+                el.classList.remove('block');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-teal-500/20', 'text-teal-400');
+                btn.classList.add('text-slate-400');
+            });
+            
+            document.getElementById(pageId).classList.remove('hidden');
+            document.getElementById(pageId).classList.add('block');
+            document.getElementById('tab-' + pageId).classList.add('bg-teal-500/20', 'text-teal-400');
+            document.getElementById('tab-' + pageId).classList.remove('text-slate-400');
+
+            renderAnalysis();
+            renderTables();
+            if(pageId === 'page5') initCalendar();
+        }
+
+        const formatMoney = (amount) => 'RM ' + Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const getAmountColor = (amount) => amount === 0 ? 'text-slate-500' : (amount > 0 ? 'text-[#34d399]' : 'text-[#f43f5e]');
+
+        // Data Entry
+        function addData(e, type) {
+            e.preventDefault();
+            const id = Date.now();
+            if(type === 'outstanding') {
+                db.outstanding.push({ id, desc: document.getElementById('out-desc').value, type: document.getElementById('out-type').value, category: document.getElementById('out-category').value, subCategory: document.getElementById('out-subcategory').value, total: parseFloat(document.getElementById('out-total').value), instalment: parseFloat(document.getElementById('out-instalment').value), date: document.getElementById('out-date').value });
+            } else if(type === 'recurring') {
+                db.recurring.push({ id, desc: document.getElementById('rec-desc').value, type: document.getElementById('rec-type').value, subCategory: 'General', amount: parseFloat(document.getElementById('rec-amount').value), frequency: document.getElementById('rec-frequency').value, date: document.getElementById('rec-date').value });
+            } else if (type === 'onetime') {
+                db.onetime.push({ id, desc: document.getElementById('one-desc').value, type: document.getElementById('one-type').value, subCategory: 'General', amount: parseFloat(document.getElementById('one-amount').value), date: document.getElementById('one-date').value });
+            }
+            e.target.reset();
+            renderTables();
+            renderAnalysis();
+        }
+
+        function deleteItem(type, id) {
+            db[type] = db[type].filter(item => item.id !== id);
+            renderTables();
+            renderAnalysis();
+        }
+
+        function renderTables() {
+            const buildRow = (item, type, extraCol1, extraCol2, amtKey) => `<tr><td class="p-3">${item.desc}</td><td class="p-3">${item.type}</td>${extraCol1}${extraCol2}<td class="p-3 ${item.type==='Inflow'?'text-emerald-400':'text-rose-400'}">${formatMoney(item[amtKey])}</td><td class="p-3 no-print"><button onclick="deleteItem('${type}', ${item.id})" class="text-rose-500 hover:text-rose-400"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+            document.getElementById('table-outstanding').innerHTML = db.outstanding.map(i => buildRow(i, 'outstanding', '', '', 'instalment')).join('');
+            document.getElementById('table-recurring').innerHTML = db.recurring.map(i => buildRow(i, 'recurring', `<td class="p-3">${i.frequency}</td>`, '', 'amount')).join('');
+            document.getElementById('table-onetime').innerHTML = db.onetime.map(i => buildRow(i, 'onetime', `<td class="p-3">${i.date}</td>`, '', 'amount')).join('');
+        }
+
+        // FORECAST ENGINE (Abridged for spacing)
+        function generateProjectionTimeline() {
+            const startDate = new Date(document.getElementById('filter-start').value);
+            const forecastEnd = new Date(document.getElementById('filter-end').value);
+            const transactions = [];
+            const toDateObj = (ds) => new Date(ds);
+            
+            db.onetime.forEach(item => { const d = toDateObj(item.date); if(d >= startDate && d <= forecastEnd) transactions.push({...item, dateObj: d, amountVal: item.type==='Inflow' ? item.amount : -item.amount}); });
+            db.outstanding.forEach(item => { let current = toDateObj(item.date); let remaining = item.total; while(current <= forecastEnd && remaining > 0) { if (current >= startDate) transactions.push({...item, dateObj: new Date(current), amountVal: item.type==='Inflow' ? item.instalment : -item.instalment}); remaining -= item.instalment; current.setMonth(current.getMonth() + 1); } });
+            db.recurring.forEach(item => { let current = toDateObj(item.date); let safety = 0; while(current <= forecastEnd && safety < 1000) { if (current >= startDate) transactions.push({...item, dateObj: new Date(current), amountVal: item.type==='Inflow' ? item.amount : -item.amount}); if(item.frequency === 'Daily') current.setDate(current.getDate() + 1); else if(item.frequency === 'Weekly') current.setDate(current.getDate() + 7); else if(item.frequency === 'Monthly') current.setMonth(current.getMonth() + 1); else if(item.frequency === 'Yearly') current.setFullYear(current.getFullYear() + 1); safety++; } });
+
+            return transactions.sort((a,b) => a.dateObj - b.dateObj);
+        }
+
+        function renderAnalysis() {
+            const interval = document.getElementById('filter-interval').value;
+            const timeline = generateProjectionTimeline();
+            const periodsMap = new Map();
+            const allInflowCats = new Set(), allOutflowCats = new Set();
+            const getKey = (dObj) => interval === 'Daily' ? dObj.toISOString().split('T')[0] : (interval === 'Monthly' ? dObj.toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase() : dObj.getFullYear().toString());
+
+            timeline.forEach(tx => {
+                const period = getKey(tx.dateObj);
+                if (!periodsMap.has(period)) periodsMap.set(period, { inflows: {}, outflows: {}, net: 0 });
+                const p = periodsMap.get(period);
+                p.net += tx.amountVal;
+                if (tx.amountVal > 0) { allInflowCats.add(tx.subCategory); p.inflows[tx.subCategory] = (p.inflows[tx.subCategory] || 0) + tx.amountVal; } 
+                else { allOutflowCats.add(tx.subCategory); p.outflows[tx.subCategory] = (p.outflows[tx.subCategory] || 0) + Math.abs(tx.amountVal); }
+            });
+
+            globalMatrixData = { periods: Array.from(periodsMap.keys()), dataMap: periodsMap, inflowCats: Array.from(allInflowCats).sort(), outflowCats: Array.from(allOutflowCats).sort() };
+            renderMatrixTable();
+            renderCalendar();
+        }
+
+        function renderMatrixTable() {
+            const startBal = parseFloat(document.getElementById('opening-balance').value) || 0;
+            const head = document.getElementById('matrix-header'); const body = document.getElementById('matrix-body');
+            
+            if(globalMatrixData.periods.length === 0) {
+                head.innerHTML = '<th>No data found for this date range.</th>';
+                body.innerHTML = '<tr class="bg-[#0f172a]"><td class="py-4 px-6 font-bold">Add inputs to view forecast matrix.</td></tr>';
+                return;
+            }
+
+            let headHTML = `<th class="py-4 px-6 font-bold text-slate-300 w-1/4">CATEGORY</th>`;
+            globalMatrixData.periods.forEach(p => headHTML += `<th class="py-4 px-6 text-right">${p}</th>`);
+            head.innerHTML = headHTML;
+
+            let bodyHTML = '';
+            let currentBal = startBal;
+            let periodBalances = [];
+            
+            globalMatrixData.periods.forEach(p => {
+                const d = globalMatrixData.dataMap.get(p);
+                periodBalances.push({ close: currentBal + d.net }); currentBal += d.net;
+            });
+
+            const generateRow = (label, dataFunc, type) => {
+                let html = `<tr class="matrix-row-hover"><td class="py-4 px-6 text-slate-300 font-medium">${label}</td>`;
+                globalMatrixData.periods.forEach((p) => {
+                    const val = dataFunc(p);
+                    html += `<td class="py-4 px-6 text-right font-medium ${getAmountColor(type==='outflow' ? -val : val)}">${formatMoney(val)}</td>`;
+                });
+                return html + `</tr>`;
+            };
+
+            globalMatrixData.inflowCats.forEach(cat => bodyHTML += generateRow(cat, (p) => globalMatrixData.dataMap.get(p).inflows[cat] || 0, 'inflow'));
+            globalMatrixData.outflowCats.forEach(cat => bodyHTML += generateRow(cat, (p) => globalMatrixData.dataMap.get(p).outflows[cat] || 0, 'outflow'));
+            
+            bodyHTML += `<tr class="bg-[#1e293b] border-t-2 border-slate-600"><td class="py-4 px-6 font-bold text-white">NET POSITION</td>`;
+            globalMatrixData.periods.forEach((p) => {
+                const net = globalMatrixData.dataMap.get(p).net;
+                bodyHTML += `<td class="py-4 px-6 text-right font-bold ${getAmountColor(net)}">${formatMoney(net)}</td>`;
+            });
+            bodyHTML += `</tr>`;
+            body.innerHTML = bodyHTML;
+        }
+
+        // CALENDAR
+        let currentDate = new Date('2026-01-01');
+        function initCalendar() {
+            const start = document.getElementById('filter-start').value;
+            if(start) currentDate = new Date(start);
+            document.getElementById('calendar-month-picker').value = currentDate.toISOString().slice(0, 7);
+            renderCalendar();
+        }
+        function changeCalendarMonth(offset) { currentDate.setMonth(currentDate.getMonth() + offset); document.getElementById('calendar-month-picker').value = currentDate.toISOString().slice(0, 7); renderCalendar(); }
+        function renderCalendar() {
+            const pickerVal = document.getElementById('calendar-month-picker').value;
+            if(pickerVal) currentDate = new Date(pickerVal + '-01');
+            const year = currentDate.getFullYear(), month = currentDate.getMonth(), firstDay = new Date(year, month, 1).getDay(), daysInMonth = new Date(year, month + 1, 0).getDate();
+            const timeline = generateProjectionTimeline();
+            
+            let gridHTML = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<div class="calendar-header">${d}</div>`).join('');
+            for(let i = 0; i < firstDay; i++) gridHTML += `<div class="calendar-cell bg-slate-800/50"></div>`;
+            for(let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${year}-${String(month+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayTxs = timeline.filter(tx => tx.dateObj.toISOString().split('T')[0] === dateStr);
+                let txsHTML = '', dailyNet = 0;
+                dayTxs.forEach(tx => { dailyNet += tx.amountVal; txsHTML += `<div class="text-[10px] ${tx.amountVal > 0 ? 'text-emerald-400' : 'text-rose-400'} truncate mt-1"> ${tx.amountVal > 0 ? '+' : '-'} ${formatMoney(tx.amountVal)}</div>`; });
+                gridHTML += `<div class="calendar-cell border border-slate-800 flex flex-col"><span class="text-xs ${dailyNet > 0 ? 'text-emerald-400 font-bold' : (dailyNet < 0 ? 'text-rose-400 font-bold' : 'text-slate-400')} mb-1">${day}</span><div class="flex-1 overflow-y-auto max-h-24 no-scrollbar">${txsHTML}</div></div>`;
+            }
+            document.getElementById('calendar-wrapper').innerHTML = gridHTML;
+        }
+
+        // CO-PILOT
+        function toggleCopilot() { document.getElementById('copilot-panel').classList.toggle('copilot-closed'); }
+        function generateAIAnalysis() {
+            const chat = document.getElementById('copilot-chat');
+            chat.innerHTML += `<div class="bg-indigo-900/40 p-4 rounded-lg rounded-br-none text-sm text-indigo-200 self-end w-3/4 mb-4">Please analyze my current forecast.</div><div id="loading-msg" class="text-slate-400 text-xs italic mb-4"><i class="fa-solid fa-spinner fa-spin"></i> Crunching numbers...</div>`;
+            chat.scrollTop = chat.scrollHeight;
+            setTimeout(() => {
+                document.getElementById('loading-msg').remove();
+                if(globalMatrixData.periods.length === 0) { chat.innerHTML += `<div class="bg-slate-700/50 p-4 rounded-lg text-sm text-slate-200 mb-4">Database is empty!</div>`; } 
+                else { let totalNet = 0; globalMatrixData.periods.forEach(p => totalNet += globalMatrixData.dataMap.get(p).net); chat.innerHTML += `<div class="bg-slate-700/50 p-4 rounded-lg text-sm text-slate-200 mb-4"><strong>Analysis Complete:</strong><br><br>Over the selected period, projected Net Cash Flow is <strong class="${totalNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${formatMoney(totalNet)}</strong>.</div>`; }
+                chat.scrollTop = chat.scrollHeight;
+            }, 1000);
+        }
+
+        // EXPORT TO EXCEL
+        function exportToExcel() {
+            let wb = XLSX.utils.book_new();
+            
+            let wsOutstanding = XLSX.utils.json_to_sheet(db.outstanding.map(i => ({ 'Description': i.desc, 'Type': i.type, 'Total (RM)': i.total, 'Instalment (RM)': i.instalment, 'Due Date': i.date })));
+            XLSX.utils.book_append_sheet(wb, wsOutstanding, "Outstanding");
+
+            let wsRecurring = XLSX.utils.json_to_sheet(db.recurring.map(i => ({ 'Description': i.desc, 'Type': i.type, 'Amount (RM)': i.amount, 'Frequency': i.frequency, 'Start Date': i.date })));
+            XLSX.utils.book_append_sheet(wb, wsRecurring, "Recurring");
+
+            let wsOnetime = XLSX.utils.json_to_sheet(db.onetime.map(i => ({ 'Description': i.desc, 'Type': i.type, 'Amount (RM)': i.amount, 'Execution Date': i.date })));
+            XLSX.utils.book_append_sheet(wb, wsOnetime, "One-Time");
+
+            let matrixTable = document.getElementById('export-matrix');
+            if (matrixTable) {
+                let wsMatrix = XLSX.utils.table_to_sheet(matrixTable);
+                XLSX.utils.book_append_sheet(wb, wsMatrix, "Forecast Matrix");
+            }
+
+            XLSX.writeFile(wb, "Telaga_Group_CashFlow_Forecast.xlsx");
+        }
+
+        // EXPORT TO PDF
+        function exportToPDF() {
+            // Track current active tab to restore later
+            const activeTabId = document.querySelector('.page-content.block').id;
+            
+            // Show all pages temporarily for the PDF
+            document.querySelectorAll('.page-content').forEach(el => {
+                el.classList.remove('hidden');
+                el.classList.add('block');
+            });
+
+            // Hide non-print elements (buttons, forms)
+            const noPrintElements = document.querySelectorAll('.no-print');
+            noPrintElements.forEach(el => el.style.display = 'none');
+
+            const content = document.getElementById('main-content');
+            
+            const opt = {
+                margin:       0.4,
+                filename:     'Telaga_Group_CashFlow_Forecast.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'in', format: 'a3', orientation: 'landscape' } // Landscape to fit tables
+            };
+
+            html2pdf().set(opt).from(content).save().then(() => {
+                // Restore the original view
+                document.querySelectorAll('.page-content').forEach(el => {
+                    if (el.id !== activeTabId) {
+                        el.classList.add('hidden');
+                        el.classList.remove('block');
+                    }
+                });
+                noPrintElements.forEach(el => el.style.display = '');
+            });
+        }
+        
+        window.onload = () => { renderAnalysis(); renderTables(); };
+    </script>
+</body>
+</html>
