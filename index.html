@@ -497,7 +497,7 @@ function formatMarkdown(text){
 // ═══════════════════════════════════════════════════════════════════
 async function callGemini(systemPrompt, userPrompt, useJson){
   var apiKey=''; // ← paste your Gemini API key here
-  var url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key='+apiKey;
+  var url='https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-preview-05-20:generateContent?key='+apiKey;
   var payload={ contents:[{parts:[{text:userPrompt}]}], systemInstruction:{parts:[{text:systemPrompt}]} };
   if(useJson){
     payload.generationConfig={
